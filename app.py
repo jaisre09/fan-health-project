@@ -26,32 +26,34 @@ if uploaded_file is not None:
     st.audio(uploaded_file)
     
     with st.spinner("Analyzing audio frequencies..."):
-        # Load audio and convert to float32
+        # Load audio and ensure it is float32
         audio, sample_rate = librosa.load(uploaded_file, sr=None) 
         audio = audio.astype(np.float32)
 
-        # Extract 40 MFCC features
+        # Extract MFCC features (The 'fingerprint' of the sound)
         mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
         
-        # Calculate the mean across time
+        # Calculate the mean
         mfccs_scaled = np.mean(mfccs.T, axis=0)
         
-        # Reshape to (1, 40) for the model
-        mfccs_reshaped = np.array([mfccs_scaled]) 
+        # FIX: Reshape to 3D (1 sample, 40 features, 1 channel)
+        # This resolves the ValueError in image_0d267d.png
+        mfccs_reshaped = mfccs_scaled.reshape(1, 40, 1) 
 
-        # Get Prediction from model
+        # Get Prediction
         prediction_probabilities = model.predict(mfccs_reshaped)
         predicted_index = np.argmax(prediction_probabilities)
         prediction_class = labels[predicted_index]
 
-        # 3. Display Results
-        st.header(f"Result: {prediction_class}")
+        # 3. Final Output Display
+        st.header(f"Diagnostic Result: {prediction_class}")
         if prediction_class == "Normal":
-            st.success("The fan is operating within healthy parameters.")
+            st.success("The fan is operating normally.")
         else:
-            st.warning(f"Warning: Potential {prediction_class} detected!")
+            st.error(f"Warning: {prediction_class} Failure Detected!")
         
    
+
 
 
 
