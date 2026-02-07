@@ -5,7 +5,7 @@ import os
 import numpy as np
 import librosa
 
-# 1. Load Model (Already done in your previous step)
+# Load Model logic (Keep this exactly as it was)
 MODEL_URL = "https://github.com/jaisre09/fan-health-project/releases/download/v1.0/fan_failure_model.h5"
 MODEL_PATH = "fan_failure_model.h5"
 
@@ -19,33 +19,32 @@ model = load_fan_model()
 labels = np.load("label_map.npy", allow_pickle=True)
 
 st.title("Fan Health Diagnostic System")
-
 uploaded_file = st.file_uploader("Upload fan audio...", type=["wav", "mp3"])
 
 if uploaded_file is not None:
     st.audio(uploaded_file)
     
-    # --- THIS IS THE MISSING PIECE ---
     with st.spinner("Analyzing audio frequencies..."):
-        # 1. Load the audio file
-        audio, sample_rate = librosa.load(uploaded_file, res_type='kaiser_fast') 
+        # Fix: Using a more stable loading method
+        audio, sample_rate = librosa.load(uploaded_file, sr=None) 
         
-        # 2. Extract features (MFCCs)
-        mfccs_features = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfccs=40)
-        mfccs_scaled_features = np.mean(mfccs_features.T, axis=0)
-        mfccs_scaled_features = mfccs_scaled_features.reshape(1, -1)
+        # 1. Ensure audio is a float32 array (librosa requirement)
+        audio = audio.astype(np.float32)
 
-        # 3. Get Prediction from your AI model
-        prediction_probabilities = model.predict(mfccs_scaled_features)
-        predicted_label_index = np.argmax(prediction_probabilities, axis=1)
-        prediction_class = labels[predicted_label_index][0]
+        # 2. Extract MFCC features with explicit parameters
+        mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
+        
+        # 3. Scale and reshape for the model
+        mfccs_scaled = np.mean(mfccs.T, axis=0)
+        mfccs_reshaped = mfccs_scaled.reshape(1, -1)
 
-    # --- DISPLAY RESULTS ---
+        # 4. Get Prediction
+        prediction_probabilities = model.predict(mfccs_reshaped)
+        predicted_index = np.argmax(prediction_probabilities)
+        prediction_class = labels[predicted_index]
+
     st.header(f"Result: {prediction_class}")
-    
-    if prediction_class == "Normal":
-        st.success("The fan is operating within healthy parameters.")
-    else:
-        st.error(f"Warning: Potential {prediction_class} detected!")
+        
    
+
 
