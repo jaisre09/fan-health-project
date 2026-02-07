@@ -1,39 +1,29 @@
 import streamlit as st
-import librosa
-import numpy as np
 import tensorflow as tf
+import urllib.request
+import os
+import numpy as np
 
-# Load your trained model and labels
-model = tf.keras.models.load_model("fan_failure_model.h5")
-label_map = np.load("label_map.npy", allow_pickle=True).item()
+# 1. This is the link to the file you uploaded in image_015787.png
+MODEL_URL = "https://github.com/jaisre09/fan-health-project/releases/download/v1.0/fan_failure_model.h5"
+MODEL_PATH = "fan_failure_model.h5"
 
-st.title("🛡️ Fan Health Diagnostic System")
-st.write("Upload a .wav file to see the Speed, Health, and Failure Type.")
+@st.cache_resource
+def load_fan_model():
+    if not os.path.exists(MODEL_PATH):
+        with st.spinner("Downloading AI Model... Please wait."):
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+    return tf.keras.models.load_model(MODEL_PATH)
 
-# File Uploader component
-uploaded_file = st.file_uploader("Upload Fan Audio", type=["wav"])
+# Load the model and labels
+model = load_fan_model()
+labels = np.load("label_map.npy")
 
-if uploaded_file:
-    # 1. Processing the audio
-    signal, sr = librosa.load(uploaded_file, sr=22050, duration=3)
-    
-    # 2. Speed (Math Logic)
-    energy = np.sqrt(np.mean(signal**2))
-    speed = "LOW" if energy < 0.02 else "MEDIUM" if energy < 0.05 else "HIGH"
-    
-    # 3. Failure Type (CNN Logic)
-    mfcc = librosa.feature.mfcc(y=signal, sr=sr, n_mfcc=40).T
-    mfcc = mfcc[np.newaxis, ..., np.newaxis]
-    prediction = model.predict(mfcc, verbose=0)
-    failure_type = label_map[np.argmax(prediction)]
-    
-    # 4. Health Score (Confidence Logic)
-    confidence = np.max(prediction) * 100
-    health_score = min(100, confidence + 5) if failure_type == "normal" else max(0, 100 - (100 - confidence) - 40)
+st.title("Fan Health Diagnostic System")
+st.write("Upload audio to check fan health.")
 
-    # UI Display
-    st.divider()
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Speed", speed)
-    c2.metric("Health Score", f"{int(health_score)}%")
-    c3.metric("Failure Type", failure_type.upper())
+uploaded_file = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
+
+if uploaded_file is not None:
+    st.audio(uploaded_file, format='audio/wav')
+    st.success("Analyzing... (This is where your prediction logic goes)")
