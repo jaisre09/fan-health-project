@@ -39,12 +39,26 @@ if uploaded_file is not None:
         mfccs_reshaped = mfccs_scaled.reshape(1, -1)
 
         # 4. Get Prediction
+        with st.spinner("Analyzing audio frequencies..."):
+        # Load and convert to float32
+        audio, sample_rate = librosa.load(uploaded_file, sr=None) 
+        audio = audio.astype(np.float32)
+
+        # Extract 40 MFCC features
+        mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
+        
+        # Calculate the mean across time
+        mfccs_scaled = np.mean(mfccs.T, axis=0)
+        
+        # IMPORTANT: Reshape to (1, 40) so the model sees it as one sample
+        mfccs_reshaped = np.array([mfccs_scaled]) 
+
+        # Get Prediction
         prediction_probabilities = model.predict(mfccs_reshaped)
         predicted_index = np.argmax(prediction_probabilities)
         prediction_class = labels[predicted_index]
-
-    st.header(f"Result: {prediction_class}")
         
    
+
 
 
