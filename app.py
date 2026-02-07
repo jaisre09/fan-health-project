@@ -17,8 +17,7 @@ def load_fan_model():
 
 # Load the model and labels
 model = load_fan_model()
-labels = np.load("label_map.npy")
-
+labels = np.load("label_map.npy", allow_pickle=True)
 st.title("Fan Health Diagnostic System")
 st.write("Upload audio to check fan health.")
 
@@ -27,3 +26,4 @@ uploaded_file = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
 if uploaded_file is not None:
     st.audio(uploaded_file, format='audio/wav')
     st.success("Analyzing... (This is where your prediction logic goes)")
+
