@@ -1,58 +1,118 @@
 import streamlit as st
-import tensorflow as tf
-import urllib.request
-import os
 import numpy as np
 import librosa
+import tensorflow as tf
+import tempfile
+import os
 
-# 1. Load Model logic
-MODEL_URL = "https://github.com/jaisre09/fan-health-project/releases/download/v1.0/fan_failure_model.h5"
-MODEL_PATH = "fan_failure_model.h5"
+# =========================
+# CONFIG
+# =========================
+SAMPLE_RATE = 22050
+DURATION = 3
+N_MFCC = 40
 
-@st.cache_resource
-def load_fan_model():
-    if not os.path.exists(MODEL_PATH):
-        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    return tf.keras.models.load_model(MODEL_PATH)
+# =========================
+# LOAD MODEL & LABELS
+# =========================
+model = tf.keras.models.load_model("fan_failure_model.h5")
+label_map = np.load("label_map.npy", allow_pickle=True).item()
 
-model = load_fan_model()
-labels = np.load("label_map.npy", allow_pickle=True)
+# =========================
+# FUNCTIONS
+# =========================
+def extract_mfcc(file_path):
+    signal, sr = librosa.load(
+        file_path,
+        sr=SAMPLE_RATE,
+        duration=DURATION
+    )
 
-# 2. UI Layout
-st.title("Fan Health Diagnostic System")
-uploaded_file = st.file_uploader("Upload fan audio...", type=["wav", "mp3"])
+    mfcc = librosa.feature.mfcc(
+        y=signal,
+        sr=sr,
+        n_mfcc=N_MFCC
+    )
+
+    mfcc = mfcc.T  # (time_steps, 40)
+
+    # 🔑 THIS IS THE MOST IMPORTANT LINE
+    mfcc = mfcc[np.newaxis, ..., np.newaxis]
+    # Final shape: (1, time_steps, 40, 1)
+
+    return mfcc
+
+
+def get_speed_level(signal):
+    rms = np.mean(librosa.feature.rms(y=signal))
+    if rms < 0.02:
+        return "LOW"
+    elif rms < 0.05:
+        return "MEDIUM"
+    else:
+        return "HIGH"
+
+
+def get_health_score(pred_confidence):
+    return int(pred_confidence * 100)
+
+
+# =========================
+# STREAMLIT UI
+# =========================
+st.set_page_config(page_title="Fan Health Diagnostic System")
+
+st.title("🌀 Fan Health Diagnostic System")
+
+uploaded_file = st.file_uploader(
+    "Upload fan audio",
+    type=["wav", "mp3"]
+)
 
 if uploaded_file is not None:
+
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        tmp.write(uploaded_file.read())
+        temp_path = tmp.name
+
+    # Display audio
     st.audio(uploaded_file)
-    
-    with st.spinner("Analyzing audio frequencies..."):
-        # Load audio and ensure it is float32
-        audio, sample_rate = librosa.load(uploaded_file, sr=None) 
-        audio = audio.astype(np.float32)
 
-        # Extract MFCC features (The 'fingerprint' of the sound)
-        mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
-        
-        # Calculate the mean
-        mfccs_scaled = np.mean(mfccs.T, axis=0)
-        
-        # FIX: Reshape to 3D (1 sample, 40 features, 1 channel)
-        # This resolves the ValueError in image_0d267d.png
-        mfccs_reshaped = mfccs_scaled.reshape(1, 40, 1) 
+    # Load signal again for speed calc
+    signal, sr = librosa.load(
+        temp_path,
+        sr=SAMPLE_RATE,
+        duration=DURATION
+    )
 
-        # Get Prediction
-        prediction_probabilities = model.predict(mfccs_reshaped)
-        predicted_index = np.argmax(prediction_probabilities)
-        prediction_class = labels[predicted_index]
+    # Extract MFCC
+    mfcc_input = extract_mfcc(temp_path)
 
-        # 3. Final Output Display
-        st.header(f"Diagnostic Result: {prediction_class}")
-        if prediction_class == "Normal":
-            st.success("The fan is operating normally.")
-        else:
-            st.error(f"Warning: {prediction_class} Failure Detected!")
+    # Predict
+    predictions = model.predict(mfcc_input)
+    predicted_index = np.argmax(predictions)
+    confidence = np.max(predictions)
+
+    failure_type = label_map[predicted_index]
+    speed_level = get_speed_level(signal)
+    health_score = get_health_score(confidence)
+
+    # =========================
+    # OUTPUT
+    # =========================
+    st.subheader("🔍 Diagnosis Result")
+
+    st.write(f"**Failure Type:** {failure_type}")
+    st.write(f"**Speed Level:** {speed_level}")
+    st.write(f"**Health Score:** {health_score}%")
+
+    # Cleanup
+    os.remove(temp_path)
+
         
    
+
 
 
 
